@@ -1,9 +1,10 @@
 mod maze;
 
 use bevy::prelude::*;
+use bevy::utils::tracing::Event;
 use maze::{Maze, SIZE};
 
-#[derive(Default, Copy, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Hash)]
 struct Position {
     x: i32,
     y: i32,
@@ -31,6 +32,8 @@ struct Atlases {
     cell: Handle<TextureAtlas>,
 }
 
+struct RegenerateEvent;
+
 fn main() {
     App::build()
         .add_resource(WindowDescriptor {
@@ -40,16 +43,12 @@ fn main() {
             ..Default::default()
         })
         .add_resource(ClearColor(Color::rgb(255., 255., 255.)))
-        .add_resource({
-            let mut m = Maze::new();
-            m.regenerate();
-            m
-        })
         .add_plugins(DefaultPlugins)
         .add_startup_system(setup)
-        .add_system(spawn_maze)
+        .add_system(make_maze)
         .add_system(position_translation)
         .add_system(keyboard_input_system)
+        .add_event::<RegenerateEvent>()
         .run();
 }
 
@@ -57,68 +56,96 @@ fn setup(
     commands: &mut Commands,
     asset_server: Res<AssetServer>,
     mut texture_atlases: ResMut<Assets<TextureAtlas>>,
+    mut regenerate_events: ResMut<Events<RegenerateEvent>>,
 ) {
     commands.spawn(Camera2dBundle::default());
     let texture_handle = asset_server.load("cell.png");
     let texture_atlas = TextureAtlas::from_grid(texture_handle, Vec2::new(4.0, 4.0), 1, 16);
     let texture_atlas_handle = texture_atlases.add(texture_atlas);
-    commands.insert_resource(Atlases {
-        cell: texture_atlas_handle,
-    });
-}
 
-fn spawn_maze(commands: &mut Commands, maze: ResMut<Maze>, atlases: Res<Atlases>) {
-    for (y, row) in maze.iter_row().enumerate() {
-        for (x, cell) in row.iter().enumerate() {
+    for y in 0..SIZE {
+        for x in 0..SIZE {
             commands
                 .spawn(SpriteSheetBundle {
-                    texture_atlas: atlases.cell.clone_weak(),
-                    sprite: TextureAtlasSprite::new((dbg!(*cell)) as u32),
-                    transform: Transform {
-                        translation: Default::default(),
-                        rotation: Default::default(),
-                        scale: Vec3::splat(25.),
-                    },
+                    texture_atlas: texture_atlas_handle.clone(),
+                    sprite: TextureAtlasSprite::new(0),
+                    transform: Transform::from_scale(Vec3::splat(25.)),
                     ..Default::default()
                 })
                 .with(Position {
                     x: x as i32,
-                    y: (SIZE - y - 1) as i32,
-                })
-                .with(Size::square(1.));
-            println!("{}, {}, {}", x, y, cell);
+                    y: y as i32,
+                });
+        }
+    }
+
+    commands.insert_resource(Atlases {
+        cell: texture_atlas_handle.clone(),
+    });
+
+    regenerate_events.send(RegenerateEvent);
+}
+
+fn make_maze(
+    mut query: Query<(&Position, &mut TextureAtlasSprite)>,
+    mut regenerate_reader: Local<EventReader<RegenerateEvent>>,
+    regenerate_events: Res<Events<RegenerateEvent>>,
+) {
+    if regenerate_reader.iter(&regenerate_events).next().is_some() {
+        let maze = Maze::new();
+        for (pos, mut sprite) in query.iter_mut() {
+            if let Some(cell) = maze.get_cell(pos.x as usize, pos.y as usize) {
+                sprite.index = cell as u32;
+                println!("cell: {:?}, index: {:b}", pos, cell);
+            }
         }
     }
 }
 
-fn convert(pos: f32, bound_window: f32, bound_game: f32) -> f32 {
+fn convert((x, y): (f32, f32), bound_window: f32, bound_game: f32) -> (f32, f32) {
     let tile_size = bound_window / bound_game;
-    pos * tile_size - (bound_window / 2.) + (tile_size / 2.)
+    ((x - 1.5) * tile_size, (1.5 - y) * tile_size)
 }
 
 fn position_translation(windows: Res<Windows>, mut q: Query<(&mut Position, &mut Transform)>) {
     let window = windows.get_primary().unwrap();
     let min_height_width = window.height().min(window.width());
     for (pos, mut transform) in q.iter_mut() {
-        transform.translation = Vec3::new(
-            convert(pos.x as f32, min_height_width as f32, ARENA_WIDTH as f32),
-            convert(pos.y as f32, min_height_width as f32, ARENA_HEIGHT as f32),
-            0.0,
+        let (x, y) = convert(
+            (pos.x as f32, pos.y as f32),
+            min_height_width as f32,
+            SIZE as f32,
         );
+        transform.translation = Vec3::new(x, y, 0.0);
     }
 }
 
 fn keyboard_input_system(
-    commands: &mut Commands,
     keyboard_input: Res<Input<KeyCode>>,
-    mut maze: ResMut<Maze>,
-    query: Query<(Entity, &TextureAtlasSprite)>,
+    mut regenerate_events: ResMut<Events<RegenerateEvent>>,
 ) {
-    if keyboard_input.pressed(KeyCode::Return) {
-        for (entity, _) in query.iter() {
-            commands.despawn(entity);
-        }
-        maze.regenerate();
-        println!("return pressed");
+    if keyboard_input.just_pressed(KeyCode::Return) {
+        regenerate_events.send(RegenerateEvent);
+        println!("pressed");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::convert;
+    use crate::maze::SIZE;
+
+    fn check((x, y): (isize, isize), (x2, y2): (isize, isize)) {
+        assert_eq!(
+            convert((x as f32, y as f32), 400., SIZE as f32),
+            (x2 as f32, y2 as f32)
+        );
+    }
+
+    #[test]
+    fn test_convert_pos() {
+        check((0, 0), (-150, 150));
+        check((0, 1), (-150, 50));
+        check((1, 0), (-50, 150));
     }
 }

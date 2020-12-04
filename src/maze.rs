@@ -11,9 +11,11 @@ pub struct Maze {
 
 impl Maze {
     pub fn new() -> Self {
-        Maze {
+        let mut maze = Maze {
             cells: [[0b0000; SIZE]; SIZE],
-        }
+        };
+        maze.regenerate();
+        maze
     }
 
     pub fn regenerate(&mut self) {
@@ -41,11 +43,18 @@ impl Maze {
                 if y == SIZE - 1 {
                     *cell |= 0b0010;
                 }
+
+                print!("({}, {}): {:b},", x, y, cell);
             }
+            println!();
         }
     }
 
     pub fn iter_row(&self) -> impl Iterator<Item = &[Cell; SIZE]> {
         self.cells.iter()
+    }
+
+    pub fn get_cell(&self, x: usize, y: usize) -> Option<u8> {
+        self.cells.get(y).and_then(|r| r.get(x)).copied()
     }
 }
