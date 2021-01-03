@@ -177,16 +177,24 @@ impl Grid {
         self.each_row_mut().flat_map(|row| row.iter_mut())
     }
 
-    pub fn iter_position(&self) -> impl Iterator<Item = Position> + '_ {
-        self.each_cell().map(|cell| cell.pos.clone())
-    }
-
     pub fn link_cell(&mut self, from: Position, to: Position, bidi: bool) {
         let cell = self.get_cell_mut(&from).unwrap();
         cell.link(to);
         if bidi {
             let cell = self.get_cell_mut(&to).unwrap();
             cell.link(from);
+        }
+    }
+
+    pub fn link_cell_to_east(&mut self, from: Position) {
+        if let Some(east) = self.east_of_cell(from) {
+            self.link_cell(from, east, true);
+        }
+    }
+
+    pub fn link_cell_to_north(&mut self, from: Position) {
+        if let Some(east) = self.north_of_cell(from) {
+            self.link_cell(from, east, true);
         }
     }
 
@@ -219,6 +227,14 @@ impl Grid {
         GridIter::new(self.rows, self.columns)
     }
 
+    pub fn iter_rows(&self) -> GridRowsIter {
+        GridRowsIter {
+            rows: self.rows as isize,
+            columns: self.columns as isize,
+            y: 0,
+        }
+    }
+
     pub fn sprite_for_cell(&self, pos: Position) -> Option<u8> {
         let cell = self.get_cell(&pos)?;
         let mut sprite: u8 = 0;
@@ -245,6 +261,50 @@ impl Grid {
     }
 }
 
+#[derive(Debug)]
+pub struct GridRowsIter {
+    rows: isize,
+    columns: isize,
+    y: isize,
+}
+
+impl Iterator for GridRowsIter {
+    type Item = GridRow;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.y >= self.rows {
+            return None;
+        }
+        let row = Some(GridRow {
+            row: self.y,
+            columns: self.columns,
+            x: 0,
+        });
+        self.y += 1;
+        row
+    }
+}
+
+#[derive(Debug)]
+pub struct GridRow {
+    row: isize,
+    columns: isize,
+    x: isize,
+}
+
+impl Iterator for GridRow {
+    type Item = Position;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.x >= self.columns {
+            return None;
+        }
+        let pos = (self.x, self.row);
+        self.x += 1;
+        Some(pos)
+    }
+}
+
 pub struct GridIter {
     rows: isize,
     columns: isize,
@@ -262,6 +322,7 @@ impl GridIter {
         }
     }
 }
+
 impl Iterator for GridIter {
     type Item = Position;
 
@@ -319,7 +380,7 @@ impl fmt::Display for Grid {
 
 #[cfg(test)]
 mod tests {
-    use crate::grid::{Grid, GridIter};
+    use crate::grid::{Grid, GridIter, GridRow, GridRowsIter};
     use crate::test_utils::{check, check_debug};
     use expect_test::expect;
 
@@ -653,7 +714,112 @@ mod tests {
                     ),
                 ]
             "#]],
-        )
+        );
+    }
+
+    #[test]
+    fn test_grid_rows_iter() {
+        let rows = GridRowsIter {
+            rows: 10,
+            columns: 8,
+            y: 0,
+        }
+        .into_iter()
+        .collect::<Vec<_>>();
+        check_debug(
+            rows,
+            expect![[r#"
+            [
+                GridRow {
+                    row: 0,
+                    columns: 8,
+                    x: 0,
+                },
+                GridRow {
+                    row: 1,
+                    columns: 8,
+                    x: 0,
+                },
+                GridRow {
+                    row: 2,
+                    columns: 8,
+                    x: 0,
+                },
+                GridRow {
+                    row: 3,
+                    columns: 8,
+                    x: 0,
+                },
+                GridRow {
+                    row: 4,
+                    columns: 8,
+                    x: 0,
+                },
+                GridRow {
+                    row: 5,
+                    columns: 8,
+                    x: 0,
+                },
+                GridRow {
+                    row: 6,
+                    columns: 8,
+                    x: 0,
+                },
+                GridRow {
+                    row: 7,
+                    columns: 8,
+                    x: 0,
+                },
+                GridRow {
+                    row: 8,
+                    columns: 8,
+                    x: 0,
+                },
+                GridRow {
+                    row: 9,
+                    columns: 8,
+                    x: 0,
+                },
+            ]
+        "#]],
+        );
+    }
+    #[test]
+    fn test_grid_row() {
+        let poss = GridRow {
+            row: 10,
+            columns: 5,
+            x: 0,
+        }
+        .into_iter()
+        .collect::<Vec<_>>();
+        check_debug(
+            poss,
+            expect![[r#"
+            [
+                (
+                    0,
+                    10,
+                ),
+                (
+                    1,
+                    10,
+                ),
+                (
+                    2,
+                    10,
+                ),
+                (
+                    3,
+                    10,
+                ),
+                (
+                    4,
+                    10,
+                ),
+            ]
+        "#]],
+        );
     }
 
     #[test]
@@ -687,7 +853,9 @@ mod tests {
             "#]],
         );
         grid.link_cell((9, 9), (8, 9), true);
-        check(&grid, expect![[r#"
+        check(
+            &grid,
+            expect![[r#"
             +---+---+---+---+---+---+---+---+---+---+
             |   |   |   |   |   |   |   |   |   |   |
             +---+---+---+---+---+---+---+---+---+---+
@@ -709,7 +877,8 @@ mod tests {
             +---+---+---+---+---+---+---+---+---+---+
             |   |   |   |   |   |   |   |   |       |
             +---+---+---+---+---+---+---+---+---+---+
-        "#]]);
+        "#]],
+        );
     }
 
     #[test]

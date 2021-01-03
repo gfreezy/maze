@@ -22,20 +22,12 @@ pub fn binary_tree<T: Rng>(grid: &mut Grid, rng: &mut T) {
 #[cfg(test)]
 mod tests {
     use crate::binary_tree::binary_tree;
-    use crate::grid::Grid;
-    use crate::test_utils::check;
     use expect_test::expect;
-    use rand::prelude::StdRng;
-    use rand::SeedableRng;
 
     #[test]
     fn test_binary_tree() {
-        let mut grid = Grid::new(10, 10);
-        let mut rng = StdRng::seed_from_u64(1);
-
-        binary_tree(&mut grid, &mut rng);
-        check(
-            &grid,
+        check_alg!(
+            binary_tree,
             expect![[r#"
                 +---+---+---+---+---+---+---+---+---+---+
                 |                                       |
@@ -58,7 +50,7 @@ mod tests {
                 +---+   +   +   +   +   +   +   +   +   +
                 |       |   |   |   |   |   |   |   |   |
                 +---+---+---+---+---+---+---+---+---+---+
-            "#]],
+            "#]]
         )
     }
 }
