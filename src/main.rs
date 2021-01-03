@@ -1,8 +1,11 @@
-mod maze;
+mod binary_tree;
+mod grid;
+#[cfg(test)]
+mod test_utils;
 
+use crate::grid::Grid;
 use bevy::prelude::*;
-use bevy::utils::tracing::Event;
-use maze::{Maze, SIZE};
+use rand::thread_rng;
 
 #[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Hash)]
 struct Position {
@@ -25,6 +28,7 @@ impl Size {
     }
 }
 
+const SIZE: usize = 4;
 const ARENA_WIDTH: usize = SIZE;
 const ARENA_HEIGHT: usize = SIZE;
 
@@ -38,16 +42,17 @@ fn main() {
     App::build()
         .add_resource(WindowDescriptor {
             title: "maze".to_string(),
-            width: 400,
-            height: 400,
+            width: 400.,
+            height: 400.,
             ..Default::default()
         })
         .add_resource(ClearColor(Color::rgb(255., 255., 255.)))
         .add_plugins(DefaultPlugins)
-        .add_startup_system(setup)
-        .add_system(make_maze)
-        .add_system(position_translation)
-        .add_system(keyboard_input_system)
+        .add_startup_system(setup.system())
+        .add_system(make_maze.system())
+        .add_system(position_translation.system())
+        .add_system(keyboard_input_system.system())
+        .add_resource(Grid::new(SIZE, SIZE))
         .add_event::<RegenerateEvent>()
         .run();
 }
@@ -89,14 +94,16 @@ fn setup(
 fn make_maze(
     mut query: Query<(&Position, &mut TextureAtlasSprite)>,
     mut regenerate_reader: Local<EventReader<RegenerateEvent>>,
+    mut grid: ResMut<Grid>,
     regenerate_events: Res<Events<RegenerateEvent>>,
 ) {
     if regenerate_reader.iter(&regenerate_events).next().is_some() {
-        let maze = Maze::new();
+        grid.regenerate();
+        binary_tree::binary_tree(&mut grid, &mut thread_rng());
         for (pos, mut sprite) in query.iter_mut() {
-            if let Some(cell) = maze.get_cell(pos.x as usize, pos.y as usize) {
-                sprite.index = cell as u32;
-                println!("cell: {:?}, index: {:b}", pos, cell);
+            if let Some(sprite_index) = grid.sprite_for_cell((pos.x as isize, pos.y as isize)) {
+                sprite.index = sprite_index as u32;
+                println!("cell: {:?}, index: {:b}", pos, sprite_index);
             }
         }
     }
@@ -133,11 +140,10 @@ fn keyboard_input_system(
 #[cfg(test)]
 mod tests {
     use crate::convert;
-    use crate::maze::SIZE;
 
     fn check((x, y): (isize, isize), (x2, y2): (isize, isize)) {
         assert_eq!(
-            convert((x as f32, y as f32), 400., SIZE as f32),
+            convert((x as f32, y as f32), 400., 4 as f32),
             (x2 as f32, y2 as f32)
         );
     }
