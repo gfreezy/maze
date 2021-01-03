@@ -1,7 +1,9 @@
+#[cfg(test)]
+#[macro_use]
+mod test_utils;
 mod binary_tree;
 mod grid;
-#[cfg(test)]
-mod test_utils;
+mod sidewinder;
 
 use crate::grid::Grid;
 use bevy::prelude::*;
@@ -28,9 +30,9 @@ impl Size {
     }
 }
 
-const SIZE: usize = 4;
-const ARENA_WIDTH: usize = SIZE;
-const ARENA_HEIGHT: usize = SIZE;
+const SIZE: usize = 10;
+const SCREEN_SIZE: f32 = 400.;
+const SPRITE_SIZE: f32 = 4.;
 
 struct Atlases {
     cell: Handle<TextureAtlas>,
@@ -42,8 +44,8 @@ fn main() {
     App::build()
         .add_resource(WindowDescriptor {
             title: "maze".to_string(),
-            width: 400.,
-            height: 400.,
+            width: SCREEN_SIZE as f32,
+            height: SCREEN_SIZE as f32,
             ..Default::default()
         })
         .add_resource(ClearColor(Color::rgb(255., 255., 255.)))
@@ -65,7 +67,7 @@ fn setup(
 ) {
     commands.spawn(Camera2dBundle::default());
     let texture_handle = asset_server.load("cell.png");
-    let texture_atlas = TextureAtlas::from_grid(texture_handle, Vec2::new(4.0, 4.0), 1, 16);
+    let texture_atlas = TextureAtlas::from_grid(texture_handle, Vec2::splat(SPRITE_SIZE), 1, 16);
     let texture_atlas_handle = texture_atlases.add(texture_atlas);
 
     for y in 0..SIZE {
@@ -74,7 +76,9 @@ fn setup(
                 .spawn(SpriteSheetBundle {
                     texture_atlas: texture_atlas_handle.clone(),
                     sprite: TextureAtlasSprite::new(0),
-                    transform: Transform::from_scale(Vec3::splat(25.)),
+                    transform: Transform::from_scale(Vec3::splat(
+                        SCREEN_SIZE / (SIZE as f32) / SPRITE_SIZE,
+                    )),
                     ..Default::default()
                 })
                 .with(Position {
@@ -99,7 +103,7 @@ fn make_maze(
 ) {
     if regenerate_reader.iter(&regenerate_events).next().is_some() {
         grid.regenerate();
-        binary_tree::binary_tree(&mut grid, &mut thread_rng());
+        sidewinder::sidewinder(&mut grid, &mut thread_rng());
         for (pos, mut sprite) in query.iter_mut() {
             if let Some(sprite_index) = grid.sprite_for_cell((pos.x as isize, pos.y as isize)) {
                 sprite.index = sprite_index as u32;
@@ -111,7 +115,10 @@ fn make_maze(
 
 fn convert((x, y): (f32, f32), bound_window: f32, bound_game: f32) -> (f32, f32) {
     let tile_size = bound_window / bound_game;
-    ((x - 1.5) * tile_size, (1.5 - y) * tile_size)
+    (
+        (x - (bound_game - 1.) / 2.) * tile_size,
+        ((bound_game - 1.) / 2. - y) * tile_size,
+    )
 }
 
 fn position_translation(windows: Res<Windows>, mut q: Query<(&mut Position, &mut Transform)>) {
