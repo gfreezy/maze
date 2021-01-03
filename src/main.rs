@@ -131,6 +131,7 @@ fn position_translation(windows: Res<Windows>, mut q: Query<(&mut Position, &mut
             SIZE as f32,
         );
         transform.translation = Vec3::new(x, y, 0.0);
+        transform.scale = Vec3::splat(min_height_width / (SIZE as f32) / SPRITE_SIZE);
     }
 }
 
